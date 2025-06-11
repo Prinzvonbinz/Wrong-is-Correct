@@ -3,236 +3,313 @@
 <head>
   <meta charset="UTF-8">
   <title>Wrong is Correct (WiC)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
-    body { font-family: Arial, sans-serif; background: #f9f9f9; margin: 0; padding: 0;}
-    .container { max-width: 500px; margin: 40px auto; background: #fff; padding: 24px; border-radius: 10px; box-shadow: 0 4px 8px #0001;}
-    h2 { margin-top: 0;}
-    input[type="text"], input[type="number"] { padding: 8px; margin: 4px 0; width: 100%; box-sizing: border-box;}
-    button { padding: 8px 16px; margin: 6px 2px;}
-    ul { padding: 0; }
-    li { list-style: none; margin: 4px 0; }
-    .flex { display: flex; align-items: center; }
-    .flex input { flex: 1; }
-    .name-list { margin: 8px 0 16px 0; }
-    .question-box { margin: 24px 0; }
-    .hidden { display: none; }
-    .split-info { background: #e2ffe2; padding: 10px; border-radius: 6px; margin-top: 16px; }
-    .winner { color: green; font-weight: bold; }
+    body { font-family: Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 0; }
+    .container { max-width: 500px; margin: 30px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #0001; padding: 24px; }
+    h1, h2 { text-align: center; }
+    label { display: block; margin: 12px 0 4px; }
+    input[type="number"], input[type="text"] { width: 100%; padding: 7px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; }
+    button, .btn { padding: 8px 18px; min-width: 80px; margin: 6px 2px; border: none; border-radius: 4px; background: #4e7cff; color: #fff; cursor: pointer; font-weight: 600; }
+    button:disabled, .btn:disabled { background: #bbb; cursor: not-allowed; }
+    .player-list { margin: 10px 0 15px; }
+    .player-tag { display: inline-block; background: #eee; border-radius: 20px; padding: 4px 12px; margin: 4px 4px 0 0; }
+    .player-tag button { background: none; color: #e33; border: none; cursor: pointer; font-size: 1em; margin-left: 7px; }
+    .row { display: flex; align-items: center; }
+    .row input { flex: 1; }
+    .split-info { background: #e8f0fe; color: #333; padding: 10px; border-radius: 6px; margin: 16px 0; }
+    .question-box { background: #f8f9fa; border-radius: 6px; padding: 18px; text-align: center; margin: 18px 0; }
+    .solution-box { background: #fff6d5; border: 1px solid #ffe299; border-radius: 6px; padding: 12px; margin: 12px 0; }
+    .footer { text-align: center; margin-top: 24px; font-size: 0.9em; color: #888; }
+    .switch { display: inline-block; position: relative; width: 40px; height: 22px; vertical-align: middle; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #ccc; border-radius: 24px; transition: .3s; }
+    .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: .3s; }
+    input:checked + .slider { background: #4e7cff; }
+    input:checked + .slider:before { transform: translateX(18px); }
+    .settings-group { margin-bottom: 16px; }
+    @media (max-width:600px) {
+      .container { padding: 10px; }
+    }
   </style>
 </head>
 <body>
-  <div class="container" id="menu">
-    <h2>Wrong is Correct (WiC) – Spielmenü</h2>
-    <label>Startbetrag (€):
-      <input type="number" min="0.01" step="0.01" id="startSum" required>
-    </label>
-    <label>Anstieg in % (z.B. 10):
-      <input type="number" min="0.01" step="0.01" id="increasePercent" required>
-    </label>
-    <label><input type="checkbox" id="splitMode"> Split Modus (am Ende geteilt)</label>
-    <h3>Teilnehmer</h3>
-    <div class="flex">
-      <input type="text" id="playerName" placeholder="Name hinzufügen">
-      <button onclick="addPlayer()">Hinzufügen</button>
-    </div>
-    <ul id="nameList" class="name-list"></ul>
-    <button onclick="startGame()" id="startBtn">Start</button>
-  </div>
+<div class="container" id="app"></div>
+<div class="footer">
+  Wrong is Correct (WiC) &copy; 2025 &mdash; Einzeldatei-Edition
+</div>
+<script>
+/* --- Hilfsfunktionen für LocalStorage --- */
+const STORAGE_KEY = "wic_game_state";
+function saveState(state) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+function loadState() {
+  try {
+    const s = localStorage.getItem(STORAGE_KEY);
+    return s ? JSON.parse(s) : null;
+  } catch { return null; }
+}
+function clearState() {
+  localStorage.removeItem(STORAGE_KEY);
+}
 
-  <div class="container hidden" id="game">
-    <h2>Wrong is Correct (WiC)</h2>
-    <div id="currentMoney"></div>
-    <div id="currentPlayer"></div>
-    <div class="question-box">
-      <label>Frage:
-        <input type="text" id="questionInput" placeholder="Frage eingeben">
-      </label>
-      <button onclick="showSolutionBtn()" id="showSolutionBtn">Lösung anzeigen</button>
+/* --- Fragenpool (Beispiel-Fragen, kann erweitert werden) --- */
+const QUESTIONS = [
+  { q: "Was ist die Hauptstadt von Frankreich?", a: "Paris" },
+  { q: "Wie viele Kontinente gibt es?", a: "7" },
+  { q: "Was ist 5 + 7?", a: "12" },
+  { q: "Welches Element hat das chemische Symbol 'O'?", a: "Sauerstoff" },
+  { q: "Wer schrieb 'Faust'?", a: "Goethe" },
+  { q: "Wie heißt der höchste Berg der Welt?", a: "Mount Everest" },
+  { q: "Welcher Planet ist der Sonne am nächsten?", a: "Merkur" },
+  { q: "Wie viele Bundesländer hat Deutschland?", a: "16" }
+];
+
+/* --- Initialzustand --- */
+const defaultState = {
+  amount: 10,
+  percent: 20,
+  split: false,
+  players: [],
+  inGame: false,
+  currentPlayerIdx: 0,
+  currentQuestionIdx: 0,
+  money: 10,
+  winner: null,
+  showSolution: false,
+  questionOrder: [],
+  history: []
+};
+
+/* --- Hilfsfunktionen für Fragenmischung --- */
+function shuffle(arr) {
+  const a = arr.slice();
+  for(let i=a.length-1; i>0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/* --- Haupt-App Rendering --- */
+function render() {
+  const app = document.getElementById('app');
+  const state = loadState() || defaultState;
+  if (!state.inGame) {
+    renderSetup(app, state);
+  } else {
+    renderGame(app, state);
+  }
+}
+
+/* --- Setup-Menü --- */
+function renderSetup(app, state) {
+  app.innerHTML = `
+    <h1>Wrong is Correct (WiC)</h1>
+    <div class="settings-group">
+      <label>Start-Betrag (€):</label>
+      <input type="number" id="amount" min="1" step="1" value="${state.amount}" required>
     </div>
-    <div id="solutionSection" class="hidden">
-      <label>Lösung:
-        <input type="text" id="solutionInput" placeholder="Lösung eingeben">
-      </label>
-      <div style="margin-top: 8px;">
-        <button onclick="answer(false)">Falsch</button>
-        <button onclick="answer(true)">Richtig</button>
+    <div class="settings-group">
+      <label>Anstieg in Prozent (%):</label>
+      <input type="number" id="percent" min="1" step="1" value="${state.percent}" required>
+    </div>
+    <div class="settings-group">
+      <label>Teilnehmer:</label>
+      <div class="row">
+        <input type="text" id="playername" placeholder="Name eingeben..." autocomplete="off">
+        <button id="addplayer">Hinzufügen</button>
+      </div>
+      <div class="player-list" id="playerlist">
+        ${state.players.map((p,i)=>`
+          <span class="player-tag">${p} <button data-rm="${i}" title="Entfernen">&times;</button></span>
+        `).join('')}
       </div>
     </div>
-  </div>
+    <div class="settings-group">
+      <label>Split-Modus:
+        <span class="switch">
+          <input type="checkbox" id="split" ${state.split ? "checked" : ""}>
+          <span class="slider"></span>
+        </span>
+        <span style="font-size:0.95em;color:#555;">(Am Ende: Gewinner zahlt nicht, Rest teilt Betrag)</span>
+      </label>
+    </div>
+    <button id="start" ${state.players.length<2 ? "disabled" : ""}>Start</button>
+    <button id="clear" style="float:right;margin-right:0;">Reset</button>
+    <div style="margin-top:16px; font-size:0.92em; color:#444;">
+      <b>Spielprinzip:</b><br>
+      Wenn eine Frage falsch beantwortet wird (absichtlich oder nicht), erhöht sich die Geldsumme um den festgelegten Prozentsatz.<br>
+      Wer richtig antwortet, bekommt das Geld. Im Split-Modus teilen die Verlierer am Ende die Summe auf.
+    </div>
+  `;
+  // Event-Listener für Setup
+  document.getElementById('amount').addEventListener('change', e=>{
+    let v = Math.max(1, parseInt(e.target.value)||1);
+    state.amount = v;
+    state.money = v;
+    saveState(state); render();
+  });
+  document.getElementById('percent').addEventListener('change', e=>{
+    let v = Math.max(1, parseInt(e.target.value)||1);
+    state.percent = v;
+    saveState(state); render();
+  });
+  document.getElementById('split').addEventListener('change', e=>{
+    state.split = e.target.checked;
+    saveState(state); render();
+  });
+  document.getElementById('addplayer').addEventListener('click', ()=>{
+    const name = document.getElementById('playername').value.trim();
+    if(name && !state.players.includes(name)) {
+      state.players.push(name);
+      saveState(state); render();
+    }
+    document.getElementById('playername').value = '';
+  });
+  document.getElementById('playername').addEventListener('keydown', e=>{
+    if(e.key==="Enter") document.getElementById('addplayer').click();
+  });
+  document.querySelectorAll('.player-tag button').forEach(btn => {
+    btn.addEventListener('click', e=>{
+      const idx = parseInt(e.target.dataset.rm);
+      state.players.splice(idx,1);
+      saveState(state); render();
+    });
+  });
+  document.getElementById('start').addEventListener('click', ()=>{
+    // Spiel initialisieren
+    state.inGame = true;
+    state.money = state.amount;
+    state.currentPlayerIdx = 0;
+    state.currentQuestionIdx = 0;
+    state.showSolution = false;
+    state.winner = null;
+    state.history = [];
+    // Zufällige Fragenreihenfolge
+    state.questionOrder = shuffle(Array.from({length: QUESTIONS.length}, (_,i)=>i));
+    saveState(state); render();
+  });
+  document.getElementById('clear').addEventListener('click', ()=>{
+    clearState(); render();
+  });
+}
 
-  <div class="container hidden" id="result">
+/* --- Spielansicht --- */
+function renderGame(app, state) {
+  // Spiel vorbei?
+  if(state.winner !== null) {
+    renderWinner(app, state);
+    return;
+  }
+  // Frage und Spieler bestimmen
+  const curIdx = state.currentQuestionIdx % state.questionOrder.length;
+  const qObj = QUESTIONS[state.questionOrder[curIdx]];
+  const player = state.players[state.currentPlayerIdx % state.players.length];
+  app.innerHTML = `
+    <h2>Wrong is Correct</h2>
+    <div><b>Aktueller Betrag:</b> <span style="font-size:1.2em">${state.money.toFixed(2).replace('.',',')} €</span></div>
+    <div class="question-box">
+      <div style="margin-bottom:8px;">Frage an <b>${player}</b>:</div>
+      <div style="font-size:1.1em;">${qObj.q}</div>
+      ${state.showSolution ? `<div class="solution-box"><b>Lösung:</b> ${qObj.a}</div>` : ""}
+      ${state.showSolution ? `
+        <button class="btn" id="wrong">Falsch</button>
+        <button class="btn" id="right">Richtig</button>
+      ` : `
+        <button class="btn" id="showSolution">Lösung zeigen</button>
+      `}
+    </div>
+    <button id="abort" style="margin-top:12px;">Zurück zum Menü</button>
+    <div style="margin-top:18px;font-size:0.97em;color:#888;">
+      <b>Regeln:</b> Bei falscher Antwort steigt der Betrag um ${state.percent}%.<br>
+      Richtig? Gewinner bekommt die Summe.
+    </div>
+  `;
+  document.getElementById('abort').addEventListener('click', ()=>{
+    clearState(); render();
+  });
+  if(!state.showSolution) {
+    document.getElementById('showSolution').addEventListener('click', ()=>{
+      state.showSolution = true;
+      saveState(state); render();
+    });
+  } else {
+    document.getElementById('wrong').addEventListener('click', ()=>{
+      // Betrag erhöhen, nächsten Spieler, nächste Frage
+      state.money = +(state.money * (1+state.percent/100)).toFixed(2);
+      state.currentPlayerIdx = (state.currentPlayerIdx+1)%state.players.length;
+      state.currentQuestionIdx++;
+      state.showSolution = false;
+      state.history.push({player, q:qObj.q, a:qObj.a, result:"falsch", sum:state.money});
+      saveState(state); render();
+    });
+    document.getElementById('right').addEventListener('click', ()=>{
+      // Gewinner merken
+      state.winner = state.currentPlayerIdx % state.players.length;
+      state.history.push({player, q:qObj.q, a:qObj.a, result:"richtig", sum:state.money});
+      saveState(state); render();
+    });
+  }
+}
+
+/* --- Gewinner & Split-Ansicht --- */
+function renderWinner(app, state) {
+  const winnerName = state.players[state.winner];
+  let splitInfo = "";
+  if(state.split && state.players.length>1) {
+    // Split: Gewinner zahlt nicht, Rest teilen Betrag
+    const losers = state.players.filter((_,i)=>i!==state.winner);
+    const share = (state.money / losers.length);
+    splitInfo = `
+      <div class="split-info">
+        <b>Split-Modus aktiv:</b><br>
+        Jeder Verlierer zahlt: <b>${share.toFixed(2).replace('.',',')} €</b><br>
+        ${losers.map(l=>`<span style="margin-right:8px;">${l}</span>`).join('')}
+      </div>
+    `;
+  }
+  app.innerHTML = `
     <h2>Spiel beendet!</h2>
-    <div id="winnerInfo"></div>
-    <div id="splitInfo" class="split-info hidden"></div>
-    <button onclick="resetGame()">Neues Spiel</button>
-  </div>
+    <div style="font-size:1.14em;margin-bottom:7px;">
+      <b>${winnerName}</b> hat korrekt geantwortet und gewinnt <b>${state.money.toFixed(2).replace('.',',')} €</b>!
+    </div>
+    ${splitInfo}
+    <div style="margin:12px 0 0 0;">
+      <button id="restart" style="background:#2a7a4f;">Neues Spiel</button>
+      <button id="abort" style="margin-left:8px;">Zurück zum Menü</button>
+    </div>
+    <div style="margin-top:20px;font-size:0.98em;">
+      <details>
+        <summary>Frageverlauf anzeigen</summary>
+        <ul style="margin-top:8px;">
+        ${state.history.map(h=>
+          `<li>${h.player}, Frage: <i>${h.q}</i> &rarr; ${h.result==="richtig"?"<b>richtig</b>":"falsch"} (${h.sum.toFixed(2).replace('.',',')} €)</li>`
+        ).join('')}
+        </ul>
+      </details>
+    </div>
+  `;
+  document.getElementById('restart').addEventListener('click', ()=>{
+    // Nur Reset, Spieler & Einstellungen bleiben
+    state.inGame = false;
+    state.money = state.amount;
+    state.currentPlayerIdx = 0;
+    state.currentQuestionIdx = 0;
+    state.showSolution = false;
+    state.winner = null;
+    state.history = [];
+    saveState(state); render();
+  });
+  document.getElementById('abort').addEventListener('click', ()=>{
+    clearState(); render();
+  });
+}
 
-  <script>
-    // --- State ---
-    let gameState = {
-      startSum: 0,
-      increasePercent: 0,
-      split: false,
-      players: [],
-      currentMoney: 0,
-      currentPlayerIndex: 0,
-      winner: null,
-      splits: [],
-    };
-
-    // --- LocalStorage Helpers ---
-    function saveState() {
-      localStorage.setItem('wic-state', JSON.stringify(gameState));
-    }
-    function loadState() {
-      const d = localStorage.getItem('wic-state');
-      if (d) {
-        gameState = JSON.parse(d);
-      }
-    }
-    function savePlayers() {
-      localStorage.setItem('wic-players', JSON.stringify(gameState.players));
-    }
-    function loadPlayers() {
-      const d = localStorage.getItem('wic-players');
-      if (d) {
-        gameState.players = JSON.parse(d);
-      }
-    }
-
-    // --- UI Functions ---
-    function updateNameList() {
-      const ul = document.getElementById('nameList');
-      ul.innerHTML = '';
-      gameState.players.forEach((name, i) => {
-        const li = document.createElement('li');
-        li.textContent = name + ' ';
-        const btn = document.createElement('button');
-        btn.textContent = 'Entfernen';
-        btn.onclick = () => { removePlayer(i); };
-        li.appendChild(btn);
-        ul.appendChild(li);
-      });
-      savePlayers();
-    }
-
-    function addPlayer() {
-      const inp = document.getElementById('playerName');
-      const name = inp.value.trim();
-      if (name && !gameState.players.includes(name)) {
-        gameState.players.push(name);
-        inp.value = '';
-        updateNameList();
-      }
-    }
-
-    function removePlayer(idx) {
-      gameState.players.splice(idx, 1);
-      updateNameList();
-    }
-
-    function startGame() {
-      // Get inputs
-      const sSum = parseFloat(document.getElementById('startSum').value.replace(',', '.'));
-      const inc = parseFloat(document.getElementById('increasePercent').value.replace(',', '.'));
-      const split = document.getElementById('splitMode').checked;
-      if (isNaN(sSum) || sSum <= 0 || isNaN(inc) || gameState.players.length < 2) {
-        alert('Bitte alle Felder korrekt ausfüllen und mindestens zwei Teilnehmer hinzufügen!');
-        return;
-      }
-      gameState.startSum = sSum;
-      gameState.increasePercent = inc;
-      gameState.split = split;
-      gameState.currentMoney = sSum;
-      gameState.currentPlayerIndex = 0;
-      gameState.winner = null;
-      gameState.splits = Array(gameState.players.length).fill(0);
-      saveState();
-      document.getElementById('menu').classList.add('hidden');
-      document.getElementById('game').classList.remove('hidden');
-      nextTurn();
-    }
-
-    function nextTurn() {
-      document.getElementById('solutionSection').classList.add('hidden');
-      document.getElementById('questionInput').value = '';
-      document.getElementById('solutionInput').value = '';
-      document.getElementById('currentMoney').innerHTML = `Aktueller Betrag: <b>€${gameState.currentMoney.toFixed(2)}</b>`;
-      document.getElementById('currentPlayer').innerHTML = `Aktueller Spieler: <b>${gameState.players[gameState.currentPlayerIndex]}</b>`;
-      document.getElementById('showSolutionBtn').disabled = false;
-    }
-
-    function showSolutionBtn() {
-      const question = document.getElementById('questionInput').value.trim();
-      if (!question) {
-        alert('Bitte eine Frage eingeben!');
-        return;
-      }
-      document.getElementById('solutionSection').classList.remove('hidden');
-      document.getElementById('showSolutionBtn').disabled = true;
-    }
-
-    function answer(isCorrect) {
-      const solution = document.getElementById('solutionInput').value.trim();
-      if (!solution) {
-        alert('Bitte die Lösung eingeben!');
-        return;
-      }
-      const player = gameState.players[gameState.currentPlayerIndex];
-      if (isCorrect) {
-        gameState.winner = player;
-        showResult();
-      } else {
-        // Increase money
-        gameState.currentMoney += gameState.currentMoney * (gameState.increasePercent / 100);
-        gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
-        nextTurn();
-      }
-      saveState();
-    }
-
-    function showResult() {
-      document.getElementById('game').classList.add('hidden');
-      document.getElementById('result').classList.remove('hidden');
-      document.getElementById('winnerInfo').innerHTML =
-        `Gewinner: <span class="winner">${gameState.winner}</span> erhält <b>€${gameState.currentMoney.toFixed(2)}</b>`;
-      if (gameState.split) {
-        // Calculate split: alle außer Gewinner zahlen
-        const notWinner = gameState.players.filter(n => n !== gameState.winner);
-        const splitAmount = gameState.currentMoney / notWinner.length;
-        let html = '<b>Jeder (außer Gewinner) zahlt:</b><br><ul>';
-        gameState.players.forEach(name => {
-          if (name !== gameState.winner) {
-            html += `<li>${name}: €${splitAmount.toFixed(2)}</li>`;
-          }
-        });
-        html += '</ul>';
-        document.getElementById('splitInfo').innerHTML = html;
-        document.getElementById('splitInfo').classList.remove('hidden');
-      } else {
-        document.getElementById('splitInfo').classList.add('hidden');
-      }
-    }
-
-    function resetGame() {
-      document.getElementById('result').classList.add('hidden');
-      document.getElementById('menu').classList.remove('hidden');
-      loadPlayers();
-      updateNameList();
-      document.getElementById('startSum').value = '';
-      document.getElementById('increasePercent').value = '';
-      document.getElementById('splitMode').checked = false;
-    }
-
-    // --- Init ---
-    window.onload = function() {
-      loadPlayers();
-      updateNameList();
-      loadState();
-      if (gameState.players && gameState.players.length > 0) {
-        updateNameList();
-      }
-    }
-  </script>
+/* --- Initialisieren --- */
+render();
+window.addEventListener('storage', render); // Synchron mit anderen Tabs
+</script>
 </body>
 </html>
